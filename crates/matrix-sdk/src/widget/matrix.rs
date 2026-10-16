@@ -29,6 +29,7 @@ use ruma::{
     api::client::{
         account::request_openid_token::v3::{Request as OpenIdRequest, Response as OpenIdResponse},
         delayed_events::{self, update_delayed_event::UpdateAction},
+        discovery::get_capabilities,
         filter::RoomEventFilter,
         rtc::livekit::{delegate_delayed_leave, get_token},
         to_device::send_event_to_device::v3::Request as RumaToDeviceRequest,
@@ -307,6 +308,30 @@ impl MatrixDriver {
     ) -> Result<delayed_events::update_delayed_event::unstable_v1::Response> {
         let r = delayed_events::update_delayed_event::unstable_v1::Request::new(delay_id, action);
         self.room.client.send(r).await.map_err(|error| Error::Http(Box::new(error)))
+    }
+
+    /// Fetches the delayed events capability advertised by the homeserver
+    /// ([MSC4140](https://github.com/matrix-org/matrix-spec-proposals/pull/4140)).
+    ///
+    /// The stable `m.delayed_events` capability is preferred over the unstable
+    /// `org.matrix.msc4140.delayed_events` one. Returns `None` if the
+    /// homeserver advertises neither.
+    ///
+    /// Errors are forwarded as-is, so that Matrix API errors reach the widget
+    /// as `matrix_api_error` details.
+    pub(crate) async fn get_delayed_events_capability(&self) -> Result<Option<Value>> {
+        let capabilities = self
+            .room
+            .client
+            .send(get_capabilities::v3::Request::new())
+            .await
+            .map_err(|error| Error::Http(Box::new(error)))?
+            .capabilities;
+
+        Ok(capabilities
+            .get("m.delayed_events")
+            .or_else(|| capabilities.get("org.matrix.msc4140.delayed_events"))
+            .map(|capability| capability.into_owned()))
     }
 
     /// Starts forwarding new room events. Once the returned `EventReceiver` is

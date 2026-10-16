@@ -18,7 +18,7 @@ use ruma::{
     serde::Raw,
 };
 use serde::{Deserialize, Deserializer, de};
-use serde_json::value::RawValue as RawJsonValue;
+use serde_json::{Value as JsonValue, value::RawValue as RawJsonValue};
 use uuid::Uuid;
 
 #[cfg(doc)]
@@ -91,6 +91,10 @@ pub(crate) enum MatrixDriverResponse {
     /// Client updated a delayed event. A response to a
     /// [`MatrixDriverRequestData::UpdateDelayedEvent`] command.
     DelayedEventUpdated(delayed_events::update_delayed_event::unstable_v1::Response),
+    /// Client fetched the delayed events capability advertised by the
+    /// homeserver, if any. A response to a
+    /// [`MatrixDriverRequestData::GetDelayedEventsCapability`] command.
+    DelayedEventsCapabilityReceived(Option<JsonValue>),
     /// The client successfully downloaded a file from a widget action.
     FileDownloaded(DownloadFileResponse),
     /// Client fetched the RTC transports advertised by the homeserver. A
@@ -206,6 +210,28 @@ mod tests {
         assert_let!(FromWidgetRequest::DownloadFile(req) = incoming_request.deserialize().unwrap());
 
         assert!(!req.content_uri.is_valid());
+    }
+
+    #[test]
+    fn parse_get_delayed_events_capability_widget_action() {
+        let raw = r#"
+        {
+            "api": "fromWidget",
+            "widgetId": "aGNStSuL3hhIISSCXgpt15j2",
+            "requestId": "generated-id-1234",
+            "action": "org.matrix.msc4157.get_delayed_events_capability",
+            "data": {}
+        }
+        "#;
+
+        assert_let!(
+            IncomingWidgetMessageKind::Request(incoming_request) =
+                serde_json::from_str::<IncomingWidgetMessage>(raw).unwrap().kind
+        );
+        assert_let!(
+            FromWidgetRequest::GetDelayedEventsCapability {} =
+                incoming_request.deserialize().unwrap()
+        );
     }
 
     #[test]

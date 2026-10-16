@@ -28,6 +28,7 @@ use ruma::{
     serde::{Base64, Raw},
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use tracing::error;
 
 use super::{
@@ -58,6 +59,8 @@ pub(super) enum FromWidgetRequest {
     SendToDevice(SendToDeviceRequest),
     #[serde(rename = "org.matrix.msc4157.update_delayed_event")]
     DelayedEventUpdate(UpdateDelayedEventRequest),
+    #[serde(rename = "org.matrix.msc4157.get_delayed_events_capability")]
+    GetDelayedEventsCapability {},
     #[serde(rename = "org.matrix.msc4039.download_file")]
     DownloadFile(DownloadFileRequest),
     #[serde(rename = "org.matrix.msc4515.get_rtc_transports")]
@@ -164,6 +167,7 @@ impl SupportedApiVersionsResponse {
                 ApiVersion::MSC2871,
                 ApiVersion::MSC3819,
                 ApiVersion::MSC4039,
+                ApiVersion::MSC4157DelayedEventsCapability,
                 ApiVersion::MSC4515,
                 ApiVersion::MSC4533,
             ],
@@ -216,6 +220,11 @@ pub(super) enum ApiVersion {
 
     #[serde(rename = "org.matrix.msc4039")]
     MSC4039,
+
+    /// Supports reading the delayed events capability advertised by the
+    /// homeserver.
+    #[serde(rename = "org.matrix.msc4157_delayed_events_capability")]
+    MSC4157DelayedEventsCapability,
 
     /// Supports discovering the RTC transports advertised by the homeserver.
     #[serde(rename = "org.matrix.msc4515")]
@@ -284,6 +293,32 @@ pub(crate) struct UpdateDelayedEventResponse {}
 impl From<update_delayed_event::unstable_v1::Response> for UpdateDelayedEventResponse {
     fn from(_: update_delayed_event::unstable_v1::Response) -> Self {
         Self {}
+    }
+}
+
+/// Response for a `get_delayed_events_capability` request.
+///
+/// [Specification].
+///
+/// [Specification]: https://github.com/matrix-org/matrix-spec-proposals/pull/4157
+#[derive(Serialize, Debug)]
+pub(crate) struct GetDelayedEventsCapabilityResponse {
+    /// The `m.delayed_events` capability advertised by the homeserver, if any.
+    #[serde(rename = "m.delayed_events", skip_serializing_if = "Option::is_none")]
+    pub(crate) delayed_events: Option<JsonValue>,
+}
+
+impl FromMatrixDriverResponse for GetDelayedEventsCapabilityResponse {
+    fn from_response(matrix_driver_response: MatrixDriverResponse) -> Option<Self> {
+        match matrix_driver_response {
+            MatrixDriverResponse::DelayedEventsCapabilityReceived(delayed_events) => {
+                Some(Self { delayed_events })
+            }
+            _ => {
+                error!("bug in MatrixDriver, received wrong event response");
+                None
+            }
+        }
     }
 }
 

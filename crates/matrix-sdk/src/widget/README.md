@@ -21,6 +21,7 @@ navigation features. There are some additional actions:
 - Discover the RTC transports advertised by the homeserver.
 - Obtain a token to authenticate with a LiveKit SFU from the homeserver.
 - Hand the delayed leave event of a MatrixRTC session over to the homeserver.
+- Read the delayed events capability advertised by the homeserver.
 
 ## The widget api
 

@@ -267,6 +267,11 @@ impl WidgetDriver {
                         .await
                         .map(MatrixDriverResponse::DelayedEventUpdated),
 
+                    MatrixDriverRequestData::GetDelayedEventsCapability => matrix_driver
+                        .get_delayed_events_capability()
+                        .await
+                        .map(MatrixDriverResponse::DelayedEventsCapabilityReceived),
+
                     MatrixDriverRequestData::SendToDeviceEvent(send_to_device_request) => {
                         matrix_driver
                             .send_to_device(

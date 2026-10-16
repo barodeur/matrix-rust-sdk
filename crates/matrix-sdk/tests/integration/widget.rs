@@ -2020,6 +2020,203 @@ async fn test_try_download_file() {
 }
 
 #[async_test]
+async fn test_get_delayed_events_capability() {
+    let (_, mock_server, driver_handle) = run_test_driver(false, false).await;
+
+    negotiate_capabilities(&driver_handle, json!(["org.matrix.msc4157.send.delayed_event"])).await;
+
+    mock_server
+        .mock_get_homeserver_capabilities()
+        .ok_json(json!({
+            "capabilities": {
+                "m.delayed_events": { "max_delay_ms": 86400000, "max_scheduled": 10 },
+            }
+        }))
+        .expect(1)
+        .mount()
+        .await;
+
+    send_request(
+        &driver_handle,
+        "get-delayed-events-capability",
+        "org.matrix.msc4157.get_delayed_events_capability",
+        json!({}),
+    );
+
+    let response = recv_message(&driver_handle).await;
+    assert_eq!(response["api"], "fromWidget");
+    assert_eq!(response["action"], "org.matrix.msc4157.get_delayed_events_capability");
+    assert_eq!(response["requestId"], "get-delayed-events-capability");
+    assert_eq!(
+        response["response"],
+        json!({
+            "m.delayed_events": { "max_delay_ms": 86400000, "max_scheduled": 10 },
+        })
+    );
+}
+
+#[async_test]
+async fn test_get_delayed_events_capability_falls_back_to_unstable() {
+    let (_, mock_server, driver_handle) = run_test_driver(false, false).await;
+
+    negotiate_capabilities(&driver_handle, json!(["org.matrix.msc4157.send.delayed_event"])).await;
+
+    mock_server
+        .mock_get_homeserver_capabilities()
+        .ok_json(json!({
+            "capabilities": {
+                "org.matrix.msc4140.delayed_events": { "max_delay_ms": 3600000, "max_scheduled": 5 },
+            }
+        }))
+        .expect(1)
+        .mount()
+        .await;
+
+    send_request(
+        &driver_handle,
+        "get-delayed-events-capability",
+        "org.matrix.msc4157.get_delayed_events_capability",
+        json!({}),
+    );
+
+    // The unstable capability is answered under the stable name.
+    let response = recv_message(&driver_handle).await;
+    assert_eq!(response["action"], "org.matrix.msc4157.get_delayed_events_capability");
+    assert_eq!(
+        response["response"],
+        json!({
+            "m.delayed_events": { "max_delay_ms": 3600000, "max_scheduled": 5 },
+        })
+    );
+}
+
+#[async_test]
+async fn test_get_delayed_events_capability_prefers_stable() {
+    let (_, mock_server, driver_handle) = run_test_driver(false, false).await;
+
+    negotiate_capabilities(&driver_handle, json!(["org.matrix.msc4157.send.delayed_event"])).await;
+
+    mock_server
+        .mock_get_homeserver_capabilities()
+        .ok_json(json!({
+            "capabilities": {
+                "m.delayed_events": { "max_delay_ms": 86400000, "max_scheduled": 10 },
+                "org.matrix.msc4140.delayed_events": { "max_delay_ms": 3600000, "max_scheduled": 5 },
+            }
+        }))
+        .expect(1)
+        .mount()
+        .await;
+
+    send_request(
+        &driver_handle,
+        "get-delayed-events-capability",
+        "org.matrix.msc4157.get_delayed_events_capability",
+        json!({}),
+    );
+
+    let response = recv_message(&driver_handle).await;
+    assert_eq!(response["action"], "org.matrix.msc4157.get_delayed_events_capability");
+    assert_eq!(
+        response["response"],
+        json!({
+            "m.delayed_events": { "max_delay_ms": 86400000, "max_scheduled": 10 },
+        })
+    );
+}
+
+#[async_test]
+async fn test_get_delayed_events_capability_not_advertised() {
+    let (_, mock_server, driver_handle) = run_test_driver(false, false).await;
+
+    negotiate_capabilities(&driver_handle, json!(["org.matrix.msc4157.send.delayed_event"])).await;
+
+    mock_server
+        .mock_get_homeserver_capabilities()
+        .ok_json(json!({ "capabilities": {} }))
+        .expect(1)
+        .mount()
+        .await;
+
+    send_request(
+        &driver_handle,
+        "get-delayed-events-capability",
+        "org.matrix.msc4157.get_delayed_events_capability",
+        json!({}),
+    );
+
+    let response = recv_message(&driver_handle).await;
+    assert_eq!(response["action"], "org.matrix.msc4157.get_delayed_events_capability");
+    assert_eq!(response["response"], json!({}));
+}
+
+#[async_test]
+async fn test_get_delayed_events_capability_propagates_homeserver_errors() {
+    let (_, mock_server, driver_handle) = run_test_driver(false, false).await;
+
+    negotiate_capabilities(&driver_handle, json!(["org.matrix.msc4157.send.delayed_event"])).await;
+
+    mock_server
+        .mock_get_homeserver_capabilities()
+        .respond_with_code_and_json(
+            403,
+            json!({
+                "errcode": "M_FORBIDDEN",
+                "error": "Capabilities are not available",
+            }),
+        )
+        .expect(1)
+        .mount()
+        .await;
+
+    send_request(
+        &driver_handle,
+        "get-delayed-events-capability",
+        "org.matrix.msc4157.get_delayed_events_capability",
+        json!({}),
+    );
+
+    // The Matrix error reaches the widget as `matrix_api_error` details.
+    let response = recv_message(&driver_handle).await;
+    assert_eq!(response["action"], "org.matrix.msc4157.get_delayed_events_capability");
+    assert!(response["response"]["error"]["message"].is_string());
+    assert_eq!(
+        response["response"]["error"]["matrix_api_error"],
+        json!({
+            "http_status": 403,
+            "response": {
+                "errcode": "M_FORBIDDEN",
+                "error": "Capabilities are not available",
+            },
+        })
+    );
+}
+
+#[async_test]
+async fn test_get_delayed_events_capability_without_permission() {
+    let (_, mock_server, driver_handle) = run_test_driver(false, false).await;
+
+    negotiate_capabilities(&driver_handle, json!([])).await;
+
+    mock_server.mock_get_homeserver_capabilities().ok_json(json!({})).never().mount().await;
+
+    send_request(
+        &driver_handle,
+        "get-delayed-events-capability",
+        "org.matrix.msc4157.get_delayed_events_capability",
+        json!({}),
+    );
+
+    let response = recv_message(&driver_handle).await;
+    assert_eq!(response["api"], "fromWidget");
+    assert_eq!(response["action"], "org.matrix.msc4157.get_delayed_events_capability");
+    assert_eq!(
+        response["response"]["error"]["message"].as_str().unwrap(),
+        "Not allowed: missing the org.matrix.msc4157.send.delayed_event capability."
+    );
+}
+
+#[async_test]
 async fn test_get_rtc_transports() {
     let (_, mock_server, driver_handle) = run_test_driver(false, false).await;
 

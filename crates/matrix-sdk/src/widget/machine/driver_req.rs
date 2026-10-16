@@ -34,8 +34,8 @@ use super::{
 use crate::widget::{
     Capabilities, StateKeySelector,
     machine::from_widget::{
-        DownloadFileResponse, RtcLivekitDelegateDelayedLeaveResponse, RtcLivekitGetTokenResponse,
-        RtcTransportsResponse,
+        DownloadFileResponse, GetDelayedEventsCapabilityResponse,
+        RtcLivekitDelegateDelayedLeaveResponse, RtcLivekitGetTokenResponse, RtcTransportsResponse,
     },
 };
 
@@ -65,6 +65,9 @@ pub(crate) enum MatrixDriverRequestData {
 
     /// Data for sending a UpdateDelayedEvent client server api request.
     UpdateDelayedEvent(UpdateDelayedEventRequest),
+
+    /// Get the delayed events capability advertised by the homeserver.
+    GetDelayedEventsCapability,
 
     /// Request a download of a file.
     DownloadFile(DownloadFileRequest),
@@ -186,6 +189,20 @@ impl From<RequestRtcTransports> for MatrixDriverRequestData {
 
 impl MatrixDriverRequest for RequestRtcTransports {
     type Response = RtcTransportsResponse;
+}
+
+/// Request the delayed events capability advertised by the homeserver.
+#[derive(Debug)]
+pub(crate) struct RequestDelayedEventsCapability;
+
+impl From<RequestDelayedEventsCapability> for MatrixDriverRequestData {
+    fn from(_: RequestDelayedEventsCapability) -> Self {
+        MatrixDriverRequestData::GetDelayedEventsCapability
+    }
+}
+
+impl MatrixDriverRequest for RequestDelayedEventsCapability {
+    type Response = GetDelayedEventsCapabilityResponse;
 }
 
 impl FromMatrixDriverResponse for request_openid_token::v3::Response {

@@ -32,8 +32,8 @@ use uuid::Uuid;
 
 use self::{
     driver_req::{
-        AcquireCapabilities, MatrixDriverRequest, MatrixDriverRequestHandle, RequestOpenId,
-        RequestRtcTransports,
+        AcquireCapabilities, MatrixDriverRequest, MatrixDriverRequestHandle,
+        RequestDelayedEventsCapability, RequestOpenId, RequestRtcTransports,
     },
     from_widget::{
         FromWidgetErrorResponse, FromWidgetRequest, ReadEventsResponse,
@@ -397,6 +397,10 @@ impl WidgetMachine {
                 })
                 .unwrap_or_default()
             }
+            FromWidgetRequest::GetDelayedEventsCapability {} => self
+                .process_get_delayed_events_capability_request(raw_request)
+                .map(|a| vec![a])
+                .unwrap_or_default(),
             FromWidgetRequest::DownloadFile(req) => self
                 .process_download_file_request(req, raw_request)
                 .map(|a| vec![a])
@@ -947,6 +951,35 @@ impl WidgetMachine {
         }
 
         let (request, action) = self.send_matrix_driver_request(req)?;
+
+        request.add_response_handler(|result, _| {
+            vec![Self::send_from_widget_response(
+                raw_request,
+                result.map_err(FromWidgetErrorResponse::from_error),
+            )]
+        });
+        Some(action)
+    }
+
+    fn process_get_delayed_events_capability_request(
+        &mut self,
+        raw_request: Raw<FromWidgetRequest>,
+    ) -> Option<Action> {
+        let CapabilitiesState::Negotiated(capabilities) = &self.capabilities else {
+            return Some(Self::send_from_widget_error_string_response(
+                raw_request,
+                "Received get delayed events capability request before capabilities negotiation",
+            ));
+        };
+
+        if !capabilities.send_delayed_event {
+            return Some(Self::send_from_widget_error_string_response(
+                raw_request,
+                format!("Not allowed: missing the {SEND_DELAYED_EVENT} capability."),
+            ));
+        }
+
+        let (request, action) = self.send_matrix_driver_request(RequestDelayedEventsCapability)?;
 
         request.add_response_handler(|result, _| {
             vec![Self::send_from_widget_response(
